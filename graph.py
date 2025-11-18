@@ -10,5 +10,5 @@ sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabe
 plt.ylabel('Actual Ground Truth')
 plt.xlabel('Bot Prediction')
 plt.title('Final Confusion Matrix (Optimized Model)')
-plt.savefig('confusion_matrix.png')
+plt.savefig('graphs/confusion_matrix.png')
 print("Chart saved as confusion_matrix.png")
