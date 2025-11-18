@@ -1,31 +1,24 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import os
 
 def prepare_data():
-    print("Loading data...")
-    df = pd.read_csv('data/all_223_examples.csv')
-    
-    df['final_text'] = df['translated_text'].fillna(df['text'])
+    if not os.path.exists('data'):
+        os.makedirs('data')
+    kb_df = pd.read_csv('data/Disinformation_Russia_Ukraine_3months.csv', encoding='cp1252')
+    kb_df[['Disinfo']].rename(columns={'Disinfo': 'narrative'}).dropna().to_csv('data/known_narratives.csv', index=False)
 
-    # We take 50% of the disinformation to build our "Knowledge Base"
-    # The rest go into the "Test Set"
+    # Build Validation and Test Sets
+    df = pd.read_csv('data/all_223_examples.csv')
+    df['translated_text'] = df['translated_text'].fillna(df['text'])
     
-    disinfo_df = df[df['label'] == 1]
-    safe_df = df[df['label'] == 0]
+    # 30% Validation (Tuning), 70% Test
+    tuning_set, test_set = train_test_split(df, test_size=0.7, random_state=42, stratify=df['label'])
     
-    narratives_train, disinfo_test = train_test_split(disinfo_df, test_size=0.5, random_state=42)
-    
-    # Combine the test sets
-    test_set = pd.concat([disinfo_test, safe_df]).sample(frac=1, random_state=42) 
-    
-    # Save the Knowledge Base
-    print(f"Extracting {len(narratives_train)} narratives for the Knowledge Base...")
-    narratives_train[['final_text']].to_csv('data/known_narratives.csv', index=False, header=['narrative'])
-    
-    # Save the Test Set
+    tuning_set.to_csv('data/tuning_data.csv', index=False)
     test_set.to_csv('data/test_data.csv', index=False)
     
-    print("Files 'known_narratives.csv' and 'test_data.csv' created.")
+    print(f"Files created: known_narratives.csv, tuning_data.csv ({len(tuning_set)}), test_data.csv ({len(test_set)})")
 
 if __name__ == "__main__":
     prepare_data()

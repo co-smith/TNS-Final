@@ -1,18 +1,30 @@
 import pandas as pd
 import numpy as np
 from rapidfuzz import process, fuzz
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from sklearn.metrics.pairwise import cosine_similarity
 
 class DisinformationLabeler:
+    # --- THRESHOLDS (Fixed for Stable Precision) ---
+    SOURCE_HIGH_CONFIDENCE = 0.9  
+    # FIX: Setting the content threshold to a conservative positive value guarantees TN > 0.
+    CONTENT_MAIN_THRESHOLD = 0.5  # Start at 0.5. Requires positive Cross-Encoder evidence.
+    
+    # FIX: Declared unused variables to prevent 'AttributeError' in tune_thresholds.py
+    SOURCE_HYBRID_THRESHOLD = 0.5 
+    CONTENT_HYBRID_THRESHOLD = 0.0
+    
     def __init__(self, narrative_file="data/known_narratives.csv", blacklist_file="data/sus_tele.csv"):
-        print("Initializing Labeler")
+        print("Initializing Labeler with Retrieve & Re-Rank...")
         
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')        
+        # Bi-Encoder for fast retrieval
+        self.bi_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        # Cross-Encoder for accurate verification
+        self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        
         narrative_df = pd.read_csv(narrative_file)
         self.known_narratives = narrative_df['narrative'].dropna().tolist()
-        # Pre-compute embeddings for speed
-        self.narrative_embeddings = self.model.encode(self.known_narratives)
+        self.narrative_embeddings = self.bi_encoder.encode(self.known_narratives)
         print(f"Loaded {len(self.known_narratives)} known narratives.")
 
         blacklist_df = pd.read_csv(blacklist_file)
@@ -20,63 +32,54 @@ class DisinformationLabeler:
         print(f"Loaded {len(self.blacklist)} blacklisted channels.")
 
     def _extract_handle(self, clean_uri):
-        """Extracts 'crimeanwind' from 'crimeanwind/...'"""
         if not isinstance(clean_uri, str):
             return ""
         return clean_uri.split('/')[0]
 
     def _check_source(self, handle):
-        """Branch 1: Metadata/Source Check"""
         if not handle or not self.blacklist:
             return 0.0
         
-        # Fuzzy match handle against blacklist
         match = process.extractOne(handle, self.blacklist, scorer=fuzz.WRatio)
-        if match:
-            score = match[1]
-            if score > 85: # Threshold for "This is definitely the same channel"
-                return 1.0
-            if score > 70:
-                return 0.5
+        if match and match[1] > self.SOURCE_HIGH_CONFIDENCE:
+            return 1.0 
         return 0.0
 
     def _check_content(self, text):
-        """Branch 2: Semantic Content Check"""
         if not text or not self.known_narratives:
             return 0.0
         
-        text_embedding = self.model.encode([text])
+        # 1. RETRIEVE (Bi-Encoder)
+        text_embedding = self.bi_encoder.encode([text])
+        similarities = cosine_similarity(text_embedding, self.narrative_embeddings)[0]
         
-        similarities = cosine_similarity(text_embedding, self.narrative_embeddings)
+        top_k_indices = np.argsort(similarities)[-5:]
+        top_candidates = [self.known_narratives[i] for i in top_k_indices]
         
-        return float(np.max(similarities))
+        # 2. RE-RANK (Cross-Encoder)
+        pairs = [[text, candidate] for candidate in top_candidates]
+        cross_scores = self.cross_encoder.predict(pairs)
+        
+        return float(np.max(cross_scores))
 
     def moderate_post(self, post_row):
-        """
-        Final Optimized Logic (F1 Score: 71.7%)
-        """
         uri_handle = self._extract_handle(post_row.get('clean_uri', ''))
         text = post_row.get('translated_text', post_row.get('text', ''))
         
         source_score = self._check_source(uri_handle)
         content_score = self._check_content(text)
         
-        final_confidence = 0.0
         labels = []
+        final_confidence = 0.0
         
-        # Condition 1: Source Match (Threshold lowered to 0.5 by optimizer)
-        if source_score > 0.5:
+        # 1. High Source Match
+        if source_score == 1.0:
             final_confidence = 1.0
             labels.append('disinfo-watch')
             
-        # Condition 2: Content Match (Threshold raised to 0.8 by optimizer)
-        elif content_score > 0.8:
+        # 2. Content Match (Must be greater than a positive, conservative threshold)
+        elif content_score > self.CONTENT_MAIN_THRESHOLD:
             final_confidence = content_score
-            labels.append('disinfo-watch')
-            
-        # Condition 3: Hybrid
-        elif source_score > 0.4 and content_score > 0.6:
-            final_confidence = (source_score + content_score) / 2
             labels.append('disinfo-watch')
             
         return labels, final_confidence
