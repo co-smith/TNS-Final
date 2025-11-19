@@ -16,8 +16,6 @@ def run_test():
     ground_truth = df['label'].tolist()
     processing_times = []
 
-    print(f"Processing {len(df)} posts...")
-
     for index, row in df.iterrows():
         start_time = time.time()
         labels, score = labeler.moderate_post(row)
