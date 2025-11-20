@@ -1,54 +1,58 @@
 import pandas as pd
-import time
 import numpy as np
 import os
-from sklearn.metrics import precision_score, recall_score, accuracy_score, confusion_matrix
+import time
+from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
 from policy_proposal_labeler import DisinformationLabeler
 
 def run_test():
-    print("Starting Evaluation")
-    if not os.path.exists('data/test_data.csv'):
-         print("Error: data/test_data.csv missing.")
-         return
-
+    print("Starting Final Evaluation...")
+    
     labeler = DisinformationLabeler()
     
+    # Load the Test Set (The model has NEVER seen this data)
     df = pd.read_csv('data/test_data.csv')
+    
+    # Clean up NaNs
     df['clean_uri'] = df['clean_uri'].fillna('')
     df['translated_text'] = df['translated_text'].fillna(df['text'])
     
-    predictions = []
-    ground_truth = df['label'].tolist()
-    processing_times = []
-
+    preds = []
+    truth = df['label'].tolist()
+        
+    start = time.time()
+    
     for index, row in df.iterrows():
-        start_time = time.time()
+        # Ask the labeler for a decision
         labels, score = labeler.moderate_post(row)
-        end_time = time.time()
         
-        processing_times.append(end_time - start_time)
-        is_flagged = 1 if 'disinfo-watch' in labels else 0
-        predictions.append(is_flagged)
-        
-    accuracy = accuracy_score(ground_truth, predictions)
-    precision = precision_score(ground_truth, predictions, zero_division=0)
-    recall = recall_score(ground_truth, predictions, zero_division=0)
-    avg_time = sum(processing_times) / len(processing_times)
-
-    print(f"Accuracy:  {accuracy:.2%}")
-    print(f"Precision: {precision:.2%}")
-    print(f"Recall:    {recall:.2%}")
-    print(f"Avg Latency: {avg_time*1000:.1f} ms")
+        # Convert label to 0 or 1
+        if 'disinfo-watch' in labels:
+            preds.append(1)
+        else:
+            preds.append(0)
+            
+    end = time.time()
     
-    cm = confusion_matrix(ground_truth, predictions)
-    tn, fp, fn, tp = cm.ravel()
-    print(f"TN: {tn} | FP: {fp} | FN: {fn} | TP: {tp}")
+    # Calculate stats
+    acc = accuracy_score(truth, preds)
+    prec = precision_score(truth, preds, zero_division=0)
+    rec = recall_score(truth, preds, zero_division=0)
     
-    # SAVE RESULTS FOR GRAPH.PY
+    print("-" * 30)
+    print(f"Accuracy:  {acc:.2%}")
+    print(f"Precision: {prec:.2%}")
+    print(f"Recall:    {rec:.2%}")
+    print(f"Total Time: {end - start:.2f}s")
+    print("-" * 30)
+    
+    # Save Confusion Matrix data for the graph script
+    cm = confusion_matrix(truth, preds)
     if not os.path.exists('graphs'):
         os.makedirs('graphs')
+        
     np.save('graphs/confusion_matrix_data.npy', cm)
-    print("Confusion matrix data saved to graphs/confusion_matrix_data.npy")
+    print("Saved confusion matrix data.")
 
 if __name__ == "__main__":
     run_test()
