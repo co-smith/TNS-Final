@@ -1,9 +1,14 @@
 import pandas as pd
 import numpy as np
+import os
 from sklearn.metrics import fbeta_score, precision_score, recall_score, confusion_matrix
 from policy_proposal_labeler import DisinformationLabeler 
 
 def tune():
+    if not os.path.exists('data/tuning_data.csv'):
+        print("Error: data/tuning_data.csv not found. Run generate_resources.py first.")
+        return
+
     labeler = DisinformationLabeler()
     
     df = pd.read_csv('data/tuning_data.csv')
@@ -11,6 +16,8 @@ def tune():
     df['translated_text'] = df['translated_text'].fillna(df['text'])
     ground_truth = df['label'].tolist()
     results = []
+    
+    print(f"Scoring {len(df)} tuning examples against new Knowledge Base...")
     
     for index, row in df.iterrows():
         uri_handle = labeler._extract_handle(row.get('clean_uri', ''))
@@ -20,7 +27,7 @@ def tune():
         c_score = labeler._check_content(text)
         results.append((s_score, c_score))
 
-    # --- DIAGNOSTICS (The Fix) ---
+    # --- DIAGNOSTICS ---
     safe_scores = [r[1] for i, r in enumerate(results) if ground_truth[i] == 0]
     disinfo_scores = [r[1] for i, r in enumerate(results) if ground_truth[i] == 1]
 
@@ -31,22 +38,19 @@ def tune():
     print(f"Avg SAFE Score:    {avg_safe:.3f}")
     print(f"Avg DISINFO Score: {avg_disinfo:.3f}")
     
-    # We force the start to be at least 0.0 to prevent negative thresholds
+    if avg_disinfo < avg_safe:
+        print("WARNING: Disinfo scores are lower than Safe scores. Your Knowledge Base may not match your Tuning Data.")
+    
     search_start = max(0.0, avg_safe) 
     search_end = max(search_start + 2.0, avg_disinfo + 1.0)
     
-    print(f"Setting Search Range: {search_start:.2f} to {search_end:.2f}")
-    
-    # Search 100 steps in this focused positive range
     c_main_thresholds = np.linspace(search_start, search_end, 100).round(2)
     s_hybrid_thresholds = [0.0, 0.5, 0.7]
-    
-    # Assumed thresholds for hybrid logic
     S_HYBRID_C_THRESHOLD = 1.0 
 
     best_f_half = -1
     best_params = (0, 0)
-    best_metrics = (0, 0, 0, 0) # P, R, TN, TP
+    best_metrics = (0, 0, 0, 0)
 
     for s_hybrid in s_hybrid_thresholds:
         for c_main in c_main_thresholds:
@@ -62,11 +66,9 @@ def tune():
                     pred = 0
                 predictions.append(pred)
             
-            # Calculate Metrics
             f_half = fbeta_score(ground_truth, predictions, beta=0.5, zero_division=0)
             tn, fp, fn, tp = confusion_matrix(ground_truth, predictions).ravel()
             
-            # CONSTRAINT: We reject models that have 0 True Negatives (useless models)
             if tn > 0 and f_half > best_f_half:
                 best_f_half = f_half
                 best_params = (s_hybrid, c_main)
@@ -76,8 +78,6 @@ def tune():
 
     print("      OPTIMIZATION RESULTS")
     print(f"Best F0.5 Score: {best_f_half:.2%}")
-    print(f"Precision:       {best_metrics[0]:.2%}")
-    print(f"Recall:          {best_metrics[1]:.2%}")
     print(f"Optimal SOURCE_HYBRID_THRESHOLD:  {best_params[0]}")
     print(f"Optimal CONTENT_MAIN_THRESHOLD:   {best_params[1]}")
 

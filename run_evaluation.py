@@ -1,13 +1,18 @@
 import pandas as pd
 import time
+import numpy as np
+import os
 from sklearn.metrics import precision_score, recall_score, accuracy_score, confusion_matrix
 from policy_proposal_labeler import DisinformationLabeler
 
 def run_test():
     print("Starting Evaluation")
+    if not os.path.exists('data/test_data.csv'):
+         print("Error: data/test_data.csv missing.")
+         return
+
     labeler = DisinformationLabeler()
     
-    # Using test data (70% split)
     df = pd.read_csv('data/test_data.csv')
     df['clean_uri'] = df['clean_uri'].fillna('')
     df['translated_text'] = df['translated_text'].fillna(df['text'])
@@ -26,8 +31,8 @@ def run_test():
         predictions.append(is_flagged)
         
     accuracy = accuracy_score(ground_truth, predictions)
-    precision = precision_score(ground_truth, predictions)
-    recall = recall_score(ground_truth, predictions)
+    precision = precision_score(ground_truth, predictions, zero_division=0)
+    recall = recall_score(ground_truth, predictions, zero_division=0)
     avg_time = sum(processing_times) / len(processing_times)
 
     print(f"Accuracy:  {accuracy:.2%}")
@@ -35,8 +40,15 @@ def run_test():
     print(f"Recall:    {recall:.2%}")
     print(f"Avg Latency: {avg_time*1000:.1f} ms")
     
-    tn, fp, fn, tp = confusion_matrix(ground_truth, predictions).ravel()
+    cm = confusion_matrix(ground_truth, predictions)
+    tn, fp, fn, tp = cm.ravel()
     print(f"TN: {tn} | FP: {fp} | FN: {fn} | TP: {tp}")
+    
+    # SAVE RESULTS FOR GRAPH.PY
+    if not os.path.exists('graphs'):
+        os.makedirs('graphs')
+    np.save('graphs/confusion_matrix_data.npy', cm)
+    print("Confusion matrix data saved to graphs/confusion_matrix_data.npy")
 
 if __name__ == "__main__":
     run_test()
