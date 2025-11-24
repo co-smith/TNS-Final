@@ -2,7 +2,8 @@
 # Disinformation Detection Pipeline – README
 
 ### Group Information
-**Group Number:** [Insert Group Number Here]
+**Group Number:** 
+ * Group 2
 **Group Members:**
 * Philip Tham
 * Bhoomika Mehta
@@ -56,6 +57,7 @@ This script runs the labeler against the held-out test set and outputs the final
 ```bash
 python run_evaluation.py
 ```
+````
 
 *Expected Output:*
 
@@ -70,5 +72,3 @@ python graph.py
 ```
 
 *Output:* An image file `graphs/confusion_matrix.png` will be created.
-````
-
