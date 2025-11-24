@@ -5,12 +5,10 @@ import time
 from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
 from policy_proposal_labeler import DisinformationLabeler
 
-def run_test():
-    print("Starting Final Evaluation...")
-    
+def run_test():    
     labeler = DisinformationLabeler()
     
-    # Load the Test Set (The model has NEVER seen this data)
+    # Load the Test Set
     df = pd.read_csv('data/test_data.csv')
     
     # Clean up NaNs
@@ -27,7 +25,7 @@ def run_test():
         labels, score = labeler.moderate_post(row)
         
         # Convert label to 0 or 1
-        if 'disinfo-watch' in labels:
+        if 'suspected-russian-disinfo' in labels:
             preds.append(1)
         else:
             preds.append(0)

@@ -106,6 +106,6 @@ class DisinformationLabeler:
         
         # Check against the threshold from config
         if score > self.threshold:
-            labels.append('disinfo-watch')
+            labels.append('suspected-russian-disinfo')
             
         return labels, score
