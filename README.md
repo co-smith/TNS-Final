@@ -1,4 +1,4 @@
-# Disinformation Detection Pipeline – README
+# Disinformation Detection Pipeline – TNS Final Project
 
 ### Group Information
 **Group Number:** 
