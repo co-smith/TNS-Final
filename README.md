@@ -1,4 +1,3 @@
-````markdown
 # Disinformation Detection Pipeline – README
 
 ### Group Information
@@ -57,7 +56,6 @@ This script runs the labeler against the held-out test set and outputs the final
 ```bash
 python run_evaluation.py
 ```
-````
 
 *Expected Output:*
 
